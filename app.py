@@ -1,10 +1,17 @@
 
+from fastapi import HTTPException
+
 from fastapi import FastAPI, status
 from fastapi import Depends
 
 from database import get_db
 from incident_schema import IncidentInput
+from incident_schema import IncidentInput, IncidentResponse, IncidentUpdate
+
 from models import Incident
+
+
+from sqlalchemy import select
 
 from sqlalchemy.orm import Session
 from db_models import IncidentRecord
@@ -53,3 +60,85 @@ def create_incident(
         "severity": record.severity,
         "created_at": record.created_at
     }
+
+
+
+@app.get("/incidents/{incident_id}", response_model=IncidentResponse)
+def get_incident(
+    incident_id: int,
+    db: Session = Depends(get_db)
+):
+    incident = db.get(IncidentRecord, incident_id)
+
+    if incident is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found"
+        )
+
+    return incident
+
+
+
+
+@app.patch("/incidents/{incident_id}", response_model=IncidentResponse)
+def update_incident(
+    incident_id: int,
+    updates: IncidentUpdate,
+    db: Session = Depends(get_db)
+):
+    record = db.get(IncidentRecord, incident_id)
+
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found"
+        )
+
+    update_data = updates.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        if value is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{field} cannot be null"
+            )
+
+        setattr(record, field, value)
+
+    incident_model = Incident(
+        service=record.service,
+        error_rate=record.error_rate,
+        latency=record.latency
+    )
+
+    record.severity = incident_model.calculate_severity()
+
+    db.commit()
+    db.refresh(record)
+
+    return record
+
+
+
+
+@app.delete(
+    "/incidents/{incident_id}",
+    status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_incident(
+    incident_id: int,
+    db: Session = Depends(get_db)
+):
+    record = db.get(IncidentRecord, incident_id)
+
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found"
+        )
+
+    db.delete(record)
+    db.commit()
+
+
