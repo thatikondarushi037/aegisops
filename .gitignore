@@ -1,0 +1,14 @@
+
+# Python virtual environments
+.venv/
+.v/
+
+# Database credentials
+.env
+
+# Python temporary files
+__pycache__/
+*.pyc
+
+# Editor files
+.vscode/
