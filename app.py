@@ -7,6 +7,7 @@ from fastapi import Depends
 from database import get_db
 from incident_schema import IncidentInput
 from incident_schema import IncidentInput, IncidentResponse, IncidentUpdate
+from sqlalchemy.exc import SQLAlchemyError
 
 from models import Incident
 
@@ -45,10 +46,19 @@ def create_incident(
         latency=incident.latency,
         severity=severity
     )
+    
+    try:
 
-    db.add(record)
-    db.commit()
-    db.refresh(record)
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Database operation failed"
+        )
 
 
 
@@ -78,6 +88,16 @@ def get_incident(
 
     return incident
 
+
+@app.get("/incidents", response_model=list[IncidentResponse])
+def get_incidents(
+    db: Session = Depends(get_db)
+):
+    statement = select(IncidentRecord)
+
+    incidents = db.scalars(statement).all()
+
+    return incidents
 
 
 
@@ -140,5 +160,7 @@ def delete_incident(
 
     db.delete(record)
     db.commit()
+    
+
 
 
