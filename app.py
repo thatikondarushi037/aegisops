@@ -27,10 +27,10 @@ def home():
 
 
 
-@app.post("/incidents", status_code=status.HTTP_201_CREATED)
+@app.post("/incidents", status_code=status.HTTP_201_CREATED, response_model=IncidentResponse)
 def create_incident(
     incident: IncidentInput,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     incident_model = Incident(
         service=incident.service,
@@ -68,7 +68,8 @@ def create_incident(
         "error_rate": record.error_rate,
         "latency": record.latency,
         "severity": record.severity,
-        "created_at": record.created_at
+        "created_at": record.created_at,
+        "status":record.status
     }
 
 

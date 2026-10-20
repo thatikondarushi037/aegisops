@@ -34,6 +34,15 @@ class IncidentRecord(Base):
         String(20),
         nullable=False
     )
+    
+    
+    
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default="open"
+    )
+
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

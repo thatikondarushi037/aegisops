@@ -22,6 +22,7 @@ class IncidentResponse(BaseModel):
     latency: int
     severity: str
     created_at: datetime
+    status: str
 
 
 
