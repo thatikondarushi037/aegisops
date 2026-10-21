@@ -12,3 +12,7 @@ __pycache__/
 
 # Editor files
 .vscode/
+
+.env.docker
+
+.env.*
