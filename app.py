@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from fastapi import FastAPI, status
 from fastapi import Depends
 
-
+from fastapi import Response
 
 from database import get_db
 from incident_schema import IncidentInput
@@ -15,6 +15,8 @@ from models import Incident
 
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+
 
 from sqlalchemy.orm import Session
 from db_models import IncidentRecord
@@ -30,8 +32,10 @@ def home():
 
 
 @app.post("/incidents", status_code=status.HTTP_201_CREATED, response_model=IncidentResponse)
+
 def create_incident(
     incident: IncidentInput,
+    response: Response,
     db: Session = Depends(get_db),
 ):
     incident_model = Incident(
@@ -41,6 +45,12 @@ def create_incident(
     )
 
     severity = incident_model.calculate_severity()
+    
+    
+    existing_incident = find_open_incident(db, incident.service)
+    if existing_incident is not None:
+        response.status_code = status.HTTP_200_OK
+        return existing_incident
     
     record = IncidentRecord(
         service=incident.service,
@@ -54,7 +64,34 @@ def create_incident(
         db.add(record)
         db.commit()
         db.refresh(record)
+        return record
         
+    except IntegrityError as error:
+        db.rollback()
+
+        constraint_name = getattr(
+            getattr(error.orig, "diag", None),
+            "constraint_name",
+            None
+        )
+        
+        if constraint_name != "uq_incidents_open_service":
+            raise HTTPException(
+                status_code=500,
+                detail="Database operation failed"
+            ) from error
+
+        existing = find_open_incident(db, incident.service)
+
+        if existing is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Incident conflict could not be resolved"
+            )
+
+        response.status_code = status.HTTP_200_OK
+        return existing
+
     except SQLAlchemyError:
         db.rollback()
         raise HTTPException(
@@ -164,6 +201,16 @@ def delete_incident(
     db.delete(record)
     db.commit()
     
-
-
-
+def find_open_incident(
+    db:Session,
+    service: str
+):
+    return(
+        db.query(IncidentRecord)
+        .filter(
+            IncidentRecord.service == service,
+            IncidentRecord.status == "open"
+        )
+        .order_by(IncidentRecord.id.desc())
+        .first()
+    )

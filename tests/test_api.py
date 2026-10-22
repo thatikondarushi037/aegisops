@@ -32,3 +32,18 @@ def test_previous_incident_does_not_persist(client):
         for incident in incidents
     )
 
+def test_duplicate_incident_reuses_existing(client):
+    payload = {
+        "service": "duplicate-test-service",
+        "error_rate": 12.0,
+        "latency": 1100
+    }
+
+    first = client.post("/incidents", json=payload)
+    second = client.post("/incidents", json=payload)
+
+    assert first.status_code == 201
+    assert second.status_code == 200
+
+    assert first.json()["id"] == second.json()["id"]
+
