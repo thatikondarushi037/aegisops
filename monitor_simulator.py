@@ -2,6 +2,11 @@ import random
 import time 
 import requests
 
+
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+
 SERVICES = [
     "payment-service",
     "login-service",
@@ -38,11 +43,35 @@ def should_alert(metrics):
 API_URL = "http://localhost:5678/webhook/aegisops-alert"
 
 
+return_policy = Retry(
+    total=3,
+    connect=3,
+    read=0,
+    backoff_factor=1,
+    status_forcelist=[429, 502, 503, 504],
+    allowed_methods=frozenset(["POST"]),
+    respect_retry_after_header=True,
+)
+
+session = requests.Session()
+
+adapter = HTTPAdapter(max_retries=return_policy)
+
+
+session.mount("http://", adapter)
+
+session.mount("https://", adapter)
+
+
+
+
+
+
 def send_metrics(metrics):
     response = requests.post(
         API_URL,
         json=metrics,
-        timeout=5
+        timeout=(3, 5)
     )
 
     response.raise_for_status()
