@@ -29,8 +29,34 @@ from rag_retriever import retrieve_runbooks
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL = "qwen2.5:3b"
 
+def validate_investigation(result, incident):
+    if result.incident_id != incident["id"]:
+        raise ValueError("Incorrect incident ID")
+    if result.requires_human_approval is not True:
+        raise ValueError("Human approval required")
+    if result.suspected_root_cause.strip().lower() not in {"unknown", "unknown - insufficient evidence"}:
+        raise ValueError("Root cause cannot be confirmed from metrics alone")
+    
+    evidence = []
+    
+    if incident["error_rate"] > 10:
+        evidence.append(f"Error rate {incident['error_rate']}% exceeds critical threshold")
+        
+    elif incident["error_rate"] > 5:
+        evidence.append(f"Error rate {incident['error_rate']}% exceeds warning threshold")
+    if incident["latency"] > 1000:
+        evidence.append(f"Latency {incident['latency']} ms exceeds critical threshold")
+    elif incident["latency"] > 500:
+        evidence.append(f"Latency {incident['latency']} ms exceeds warning threshold")
 
-def investigate_incident(incident):
+    # Evidence comes from trusted metrics rather than unverified model text.
+    result.evidence = evidence
+    return result
+
+
+
+
+def investigate_incident(incident, use_rag=True):
     # STEP 1 - Build a search query from the incident information.
     # These are observed input measurements, not proof of the root cause.
     query = (
@@ -43,7 +69,7 @@ def investigate_incident(incident):
     # STEP 2 - Retrieve the most relevant runbook chunk.
     # top_k=1 means one passage; later we can compare against top_k=3.
     # This is retrieval, not confirmation that its possible causes occurred.
-    matches = retrieve_runbooks(query, top_k=1)
+    matches = retrieve_runbooks(query, top_k=1) if use_rag else []
 
     # Preserve the original source filename alongside the retrieved text.
     # If retrieval finds nothing, tell the model instead of pretending it did.
@@ -89,7 +115,7 @@ def investigate_incident(incident):
                         f"RETRIEVED RUNBOOK:\n{context}\n\n"
                         "Use the runbook to recommend relevant investigation steps. "
                         "Do not include unverified runbook causes in the evidence list. "
-                        "Return the required structured investigation."
+                        "Return the required structured investigation. "
                         "EVIDENCE RULES: "
                         "Evidence must contain observed incident facts only. "
                         "Runbook investigation steps are NOT evidence. "
@@ -115,30 +141,9 @@ def investigate_incident(incident):
     
     if result.requires_human_approval is not True:
         raise ValueError("Investigation must require human approval")
-
-
-
     
-    evidence =[]
-    
-    if incident["error_rate"] > 10:
-        evidence.append(
-            f"Error rate is {incident['error_rate']}%, above the crtical threshold of 10%."
-        )
-    elif incident["error_rate"] > 5:
-        evidence.append(
-            f"Error rate is {incident['error_rate']}%, above the warning threshold of 5%."
-        )
-    if incident["latency"] > 1000:
-        evidence.append(
-            f"Latency is {incident['latency']} ms, above the critical threshold of 1000 ms."
-        )
-    elif incident["latency"] > 500:
-        evidence.append(
-            f"Latency is {incident['latency']} ms, above the warning threshold of 500 ms."
-        )
-    result.evidence = evidence
-    return result
+    # Delegate the incident checks and metric evidence construction.
+    return validate_investigation(result, incident)
 
 
 # STEP 6 - Test the complete RAG pipeline with a synthetic incident.

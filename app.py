@@ -3,9 +3,11 @@ from fastapi import HTTPException
 
 from fastapi import FastAPI, status
 from fastapi import Depends
+from sqlalchemy import select
 
 from fastapi import Response
-
+from llm_investigator  import investigate_incident
+from investigation_schema import InvestigationResult, InvestigationHistory
 from database import get_db
 from incident_schema import IncidentInput
 from incident_schema import IncidentInput, IncidentResponse, IncidentUpdate
@@ -19,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 
 
 from sqlalchemy.orm import Session
-from db_models import IncidentRecord
+from db_models import IncidentRecord, InvestigationRecord
 
 
 app = FastAPI(title="AegisOps API")
@@ -214,3 +216,78 @@ def find_open_incident(
         .order_by(IncidentRecord.id.desc())
         .first()
     )
+
+
+@app.post(
+    "/incidents/{incident_id}/investigate",
+    response_model=InvestigationResult
+)
+def investigate_existing_incident(
+    incident_id: int,
+    db: Session = Depends(get_db)
+):
+    record = db.get(IncidentRecord, incident_id)
+
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found"
+        )
+
+    incident_data = {
+        "id": record.id,
+        "service": record.service,
+        "error_rate": record.error_rate,
+        "latency": record.latency,
+        "severity": record.severity
+    }
+
+        # Generate the AI investigation first.
+    result = investigate_incident(incident_data)
+
+    # Save a separate investigation record linked to the incident.
+    investigation_record = InvestigationRecord(
+        incident_id=record.id,
+        suspected_root_cause=result.suspected_root_cause,
+        evidence=result.evidence,
+        recommended_action=result.recommended_action,
+        confidence=result.confidence,
+        requires_human_approval=result.requires_human_approval,
+    )
+
+    try:
+        db.add(investigation_record)
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to save investigation"
+        )
+
+    return result
+
+
+@app.get(
+    "/incidents/{incident_id}/investigations",
+    response_model=list[InvestigationHistory]
+)
+def get_investigation_history(
+    incident_id: int,
+    db: Session = Depends(get_db)
+):
+    incident = db.get(IncidentRecord, incident_id)
+
+    if incident is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found"
+        )
+
+    statement = (
+        select(InvestigationRecord)
+        .where(InvestigationRecord.incident_id == incident_id)
+        .order_by(InvestigationRecord.created_at.desc())
+    )
+
+    return db.scalars(statement).all()

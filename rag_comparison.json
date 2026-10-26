@@ -1,0 +1,31 @@
+{
+  "incident": {
+    "id": 54,
+    "service": "payment-service",
+    "error_rate": 15.0,
+    "latency": 1200,
+    "severity": "critical"
+  },
+  "llm_only": {
+    "incident_id": 54,
+    "suspected_root_cause": "Unknown",
+    "evidence": [
+      "Error rate is 15.0%, above the crtical threshold of 10%.",
+      "Latency is 1200 ms, above the critical threshold of 1000 ms."
+    ],
+    "recommended_action": "Perform a comprehensive system health check to identify potential bottlenecks or failures. This should include checking for any recent changes in the payment-service or its dependencies, as well as monitoring for any unusual network traffic or resource usage that could be impacting performance. Additionally, review the logs for the payment-service and any related services for any error messages or warnings that might indicate the root cause of the issue. Conduct a service degradation test to isolate the problem and determine if the issue is specific to the payment-service or a broader system issue.",
+    "confidence": "low",
+    "requires_human_approval": true
+  },
+  "rag_assisted": {
+    "incident_id": 54,
+    "suspected_root_cause": "Unknown",
+    "evidence": [
+      "Error rate is 15.0%, above the crtical threshold of 10%.",
+      "Latency is 1200 ms, above the critical threshold of 1000 ms."
+    ],
+    "recommended_action": "1. Review recent deployment logs and commit history for any changes that may have affected the payment service.\n2. Examine the application error logs for specific error messages and stack traces that could indicate the root cause.\n3. Check the database connection pool metrics to determine if the issue is related to database connection exhaustion.\n4. Inspect slow queries in the database to identify any performance bottlenecks.\n5. Monitor the health of the downstream payment provider to ensure there are no issues with the external service.\n6. If possible, perform a stress test on the payment service to identify any concurrency or resource limitations.",
+    "confidence": "low",
+    "requires_human_approval": true
+  }
+}
