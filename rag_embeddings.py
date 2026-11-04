@@ -1,9 +1,10 @@
 import requests
+from settings import OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL, OLLAMA_EMBED_TIMEOUT
 
 from rag_loader import load_runbooks, chunk_documents
 # load the runbooks and chunk them into smaller pieces for processing and analysis. This will help in managing large documents and improve the efficiency of any subsequent operations, such as searching or analyzing the content.
-EMBED_URL = "http://localhost:11434/api/embed"
-EMBED_MODEL = "nomic-embed-text"
+EMBED_URL = f"{OLLAMA_BASE_URL}/api/embed"
+EMBED_MODEL = OLLAMA_EMBED_MODEL
 
 # function to generate embeddings for a given text using the specified embedding model. This will help in converting the text into a numerical representation that can be used for various machine learning tasks, such as similarity search or clustering.
 def embed_text(text):
@@ -14,7 +15,7 @@ def embed_text(text):
             "input": text,
             "truncate": False
         },
-        timeout=30
+        timeout=(5, OLLAMA_EMBED_TIMEOUT)
     )
     response.raise_for_status()  # Check if the request was successful and raise an error if not
     return response.json()["embeddings"]

@@ -15,7 +15,7 @@ from conftest import migrate
 
 
 PREVIOUS = "f52e0932e446"
-LATEST = "c14a0e7d921b"
+LATEST = "d150b8e2a731"
 
 
 def insert_incident(connection, service="migration-test", status="open"):
@@ -59,6 +59,7 @@ def test_existing_upgrade_preserves_history_and_foreign_key(schema_engine):
         for table, rows in before.items():
             assert connection.execute(text(f"SELECT * FROM {table} ORDER BY id")).all() == rows
         assert inspect(connection).get_foreign_keys("investigations")[0]["referred_table"] == "incidents"
+        assert connection.execute(text("SELECT count(*) FROM investigation_jobs")).scalar_one() == 0
     with pytest.raises(IntegrityError):
         with schema_engine.begin() as connection:
             connection.execute(text("DELETE FROM incidents WHERE id=:id"), {"id": incident_id})
@@ -112,5 +113,8 @@ def test_concurrent_ingestion_reuses_one_incident(migrated_engine, monkeypatch):
             assert connection.execute(text(
                 "SELECT count(*) FROM incidents WHERE service=:service AND status='open'"
             ), {"service": payload["service"]}).scalar_one() == 1
+            assert connection.execute(text(
+                "SELECT count(*) FROM investigation_jobs WHERE incident_id=:id"
+            ), {"id": responses[0].json()["id"]}).scalar_one() == 1
     finally:
         app_module.app.dependency_overrides.pop(get_db, None)

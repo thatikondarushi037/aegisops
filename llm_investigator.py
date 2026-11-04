@@ -22,12 +22,13 @@ from pydantic import ValidationError
 
 from investigation_schema import InvestigationResult
 from rag_retriever import retrieve_runbooks
+from settings import OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL, OLLAMA_CHAT_TIMEOUT
 
 
 # Ollama runs locally on our Windows machine for this learning milestone.
 # Qwen generates text; the embedding model in rag_retriever finds runbooks.
-OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL = "qwen2.5:3b"
+OLLAMA_URL = f"{OLLAMA_BASE_URL}/api/chat"
+MODEL = OLLAMA_CHAT_MODEL
 
 def validate_investigation(result, incident):
     if result.incident_id != incident["id"]:
@@ -125,7 +126,7 @@ def investigate_incident(incident, use_rag=True):
                 },
             ],
         },
-     timeout=120,
+     timeout=(5, OLLAMA_CHAT_TIMEOUT),
     )
     response.raise_for_status()
 

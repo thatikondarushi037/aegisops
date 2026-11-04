@@ -21,7 +21,11 @@ from sqlalchemy.exc import IntegrityError
 
 
 from sqlalchemy.orm import Session
-from db_models import IncidentRecord, InvestigationRecord
+from db_models import IncidentRecord, InvestigationRecord, InvestigationJob
+from investigation_service import generate_investigation, incident_snapshot, save_investigation
+from job_schema import InvestigationJobResponse
+from settings import WorkerSettings
+import requests
 
 
 app = FastAPI(title="AegisOps API")
@@ -64,6 +68,11 @@ def create_incident(
     try:
 
         db.add(record)
+        db.flush()
+        db.add(InvestigationJob(
+            incident_id=record.id,
+            max_attempts=WorkerSettings.from_env().max_attempts,
+        ))
         db.commit()
         db.refresh(record)
         return record
@@ -234,29 +243,19 @@ def investigate_existing_incident(
             detail="Incident not found"
         )
 
-    incident_data = {
-        "id": record.id,
-        "service": record.service,
-        "error_rate": record.error_rate,
-        "latency": record.latency,
-        "severity": record.severity
-    }
-
-        # Generate the AI investigation first.
-    result = investigate_incident(incident_data)
-
-    # Save a separate investigation record linked to the incident.
-    investigation_record = InvestigationRecord(
-        incident_id=record.id,
-        suspected_root_cause=result.suspected_root_cause,
-        evidence=result.evidence,
-        recommended_action=result.recommended_action,
-        confidence=result.confidence,
-        requires_human_approval=result.requires_human_approval,
-    )
+    incident_data = incident_snapshot(record)
+    # End the read transaction before slow model work. The shared service
+    # checks identity, metrics evidence, and mandatory human approval.
+    db.rollback()
+    try:
+        result = generate_investigation(incident_data, investigator=investigate_incident)
+    except requests.Timeout:
+        raise HTTPException(status_code=504, detail="Investigation model timed out") from None
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        raise HTTPException(status_code=502, detail="Investigation model failed validation or is unavailable") from None
 
     try:
-        db.add(investigation_record)
+        save_investigation(db, result, incident_data)
         db.commit()
     except SQLAlchemyError:
         db.rollback()
@@ -291,3 +290,21 @@ def get_investigation_history(
     )
 
     return db.scalars(statement).all()
+
+
+@app.get(
+    "/incidents/{incident_id}/investigation-job",
+    response_model=InvestigationJobResponse,
+)
+def get_automatic_investigation_job(incident_id: int, db: Session = Depends(get_db)):
+    # Local-only milestone. This route must gain the same authentication and
+    # incident authorization as history before any remote deployment.
+    if db.get(IncidentRecord, incident_id) is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    job = db.scalar(select(InvestigationJob).where(
+        InvestigationJob.incident_id == incident_id,
+        InvestigationJob.trigger == "automatic_initial",
+    ))
+    if job is None:
+        raise HTTPException(status_code=404, detail="Automatic investigation job not found")
+    return job

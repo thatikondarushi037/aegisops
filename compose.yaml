@@ -18,11 +18,27 @@ services:
     build: .
     env_file:
       - .env.docker
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     ports:
       - "127.0.0.1:8001:8000"
     depends_on:
       db:
         condition: service_healthy
+
+  worker:
+    build: .
+    profiles: ["worker"]
+    command: ["python", "-m", "worker"]
+    env_file:
+      - .env.docker
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    depends_on:
+      db:
+        condition: service_healthy
+    stop_grace_period: 4m
+    restart: unless-stopped
 
 volumes:
   postgres_data:
