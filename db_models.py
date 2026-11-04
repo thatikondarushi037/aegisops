@@ -1,7 +1,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, Integer, String
+from sqlalchemy import DateTime, Float, Integer, String, Index, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from sqlalchemy import ForeignKey, Text, JSON, Boolean
@@ -11,6 +11,14 @@ from database import Base
 
 class IncidentRecord(Base):
     __tablename__ = "incidents"
+    __table_args__ = (
+        Index(
+            "uq_incidents_open_service",
+            "service",
+            unique=True,
+            postgresql_where=text("status = 'open'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(
         Integer,
