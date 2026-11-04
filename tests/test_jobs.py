@@ -45,7 +45,7 @@ def committed_client(migrated_engine):
 
     app_module.app.dependency_overrides[get_db] = override
     try:
-        with TestClient(app_module.app) as client:
+        with TestClient(app_module.app, headers={"Authorization": "Bearer test-only-operator"}) as client:
             yield client
     finally:
         app_module.app.dependency_overrides.pop(get_db, None)
@@ -82,6 +82,46 @@ def test_ingestion_is_atomic_pending_and_no_inference(committed_client, migrated
     with pytest.raises(IntegrityError):
         with Session(migrated_engine) as db, db.begin():
             db.add(InvestigationJob(incident_id=incident_id))
+
+
+def test_delivery_retry_after_commit_creates_one_job(committed_client, migrated_engine, monkeypatch):
+    """A lost acknowledgement retries a committed ingestion, not a new job."""
+    import monitor_simulator as simulator
+    statuses = []
+
+    class DeliveryProxy(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_POST(self):
+            payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            response = committed_client.post("/incidents", json=payload, headers={
+                "Authorization": "Bearer test-only-ingest",
+            })
+            statuses.append(response.status_code)
+            # The first backend transaction commits but its acknowledgement is lost.
+            self.send_response(503 if len(statuses) == 1 else response.status_code)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(response.content)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DeliveryProxy)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setattr(simulator, "API_URL", f"http://127.0.0.1:{server.server_port}/webhook")
+    monkeypatch.setattr("urllib3.util.retry.Retry.sleep", lambda *_: None)
+    try:
+        result = simulator.send_metrics(PAYLOAD)
+        assert statuses == [201, 200]
+        with Session(migrated_engine) as db:
+            assert db.scalar(select(func.count()).select_from(InvestigationJob)) == 1
+            job = db.scalar(select(InvestigationJob))
+            assert job.incident_id == result["id"]
+            assert job.status == "pending" and job.attempts == 0
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_job_insert_failure_rolls_back_incident(committed_client, migrated_engine):

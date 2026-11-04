@@ -28,7 +28,9 @@ from settings import WorkerSettings
 import requests
 
 
-app = FastAPI(title="AegisOps API")
+from authentication import require_ingest, require_operator
+
+app = FastAPI(title="AegisOps API", version="0.16.0")
 
 
 @app.get("/")
@@ -37,7 +39,7 @@ def home():
 
 
 
-@app.post("/incidents", status_code=status.HTTP_201_CREATED, response_model=IncidentResponse)
+@app.post("/incidents", dependencies=[Depends(require_ingest)], status_code=status.HTTP_201_CREATED, response_model=IncidentResponse)
 
 def create_incident(
     incident: IncidentInput,
@@ -124,7 +126,7 @@ def create_incident(
 
 
 
-@app.get("/incidents/{incident_id}", response_model=IncidentResponse)
+@app.get("/incidents/{incident_id}", dependencies=[Depends(require_operator)], response_model=IncidentResponse)
 def get_incident(
     incident_id: int,
     db: Session = Depends(get_db)
@@ -140,7 +142,7 @@ def get_incident(
     return incident
 
 
-@app.get("/incidents", response_model=list[IncidentResponse])
+@app.get("/incidents", dependencies=[Depends(require_operator)], response_model=list[IncidentResponse])
 def get_incidents(
     db: Session = Depends(get_db)
 ):
@@ -152,7 +154,7 @@ def get_incidents(
 
 
 
-@app.patch("/incidents/{incident_id}", response_model=IncidentResponse)
+@app.patch("/incidents/{incident_id}", dependencies=[Depends(require_operator)], response_model=IncidentResponse)
 def update_incident(
     incident_id: int,
     updates: IncidentUpdate,
@@ -195,6 +197,7 @@ def update_incident(
 
 @app.delete(
     "/incidents/{incident_id}",
+    dependencies=[Depends(require_operator)],
     status_code=status.HTTP_204_NO_CONTENT
 )
 def delete_incident(
@@ -229,6 +232,7 @@ def find_open_incident(
 
 @app.post(
     "/incidents/{incident_id}/investigate",
+    dependencies=[Depends(require_operator)],
     response_model=InvestigationResult
 )
 def investigate_existing_incident(
@@ -269,6 +273,7 @@ def investigate_existing_incident(
 
 @app.get(
     "/incidents/{incident_id}/investigations",
+    dependencies=[Depends(require_operator)],
     response_model=list[InvestigationHistory]
 )
 def get_investigation_history(
@@ -294,11 +299,10 @@ def get_investigation_history(
 
 @app.get(
     "/incidents/{incident_id}/investigation-job",
+    dependencies=[Depends(require_operator)],
     response_model=InvestigationJobResponse,
 )
 def get_automatic_investigation_job(incident_id: int, db: Session = Depends(get_db)):
-    # Local-only milestone. This route must gain the same authentication and
-    # incident authorization as history before any remote deployment.
     if db.get(IncidentRecord, incident_id) is None:
         raise HTTPException(status_code=404, detail="Incident not found")
     job = db.scalar(select(InvestigationJob).where(

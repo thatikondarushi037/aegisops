@@ -102,7 +102,7 @@ def test_concurrent_ingestion_reuses_one_incident(migrated_engine, monkeypatch):
     payload = {"service": "concurrency-v014", "error_rate": 15, "latency": 1200}
     try:
         def send(_):
-            with TestClient(app_module.app) as client:
+            with TestClient(app_module.app, headers={"Authorization": "Bearer test-only-ingest"}) as client:
                 return client.post("/incidents", json=payload)
 
         with ThreadPoolExecutor(max_workers=workers) as pool:

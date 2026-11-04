@@ -4,6 +4,7 @@
 .venv/
 .v/
 .env
+.env.*
 .git/
 __pycache__/
 *.pyc

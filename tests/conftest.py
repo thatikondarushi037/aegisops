@@ -92,10 +92,17 @@ def client(migrated_engine):
     app.dependency_overrides[get_db] = override_get_db
 
     try:
-        with TestClient(app) as test_client:
+        with TestClient(app, headers={"Authorization": "Bearer test-only-operator"}) as test_client:
             yield test_client
 
     finally:
         app.dependency_overrides.pop(get_db, None)
         transaction.rollback()
         connection.close()
+
+
+@pytest.fixture(autouse=True)
+def local_test_credentials(monkeypatch):
+    """Exercise real authentication with disposable credentials, never deployment secrets."""
+    monkeypatch.setenv("AEGISOPS_OPERATOR_TOKEN", "test-only-operator")
+    monkeypatch.setenv("AEGISOPS_N8N_TOKEN", "test-only-ingest")

@@ -1,3 +1,4 @@
+import os
 import random
 import time 
 import requests
@@ -40,7 +41,7 @@ def should_alert(metrics):
 
 
 
-API_URL = "http://localhost:5678/webhook/aegisops-alert"
+API_URL = os.getenv("N8N_WEBHOOK_URL", "http://127.0.0.1:5678/webhook/aegisops-v016-alert")
 
 
 return_policy = Retry(
@@ -50,7 +51,7 @@ return_policy = Retry(
     backoff_factor=1,
     status_forcelist=[429, 502, 503, 504],
     allowed_methods=frozenset(["POST"]),
-    respect_retry_after_header=True,
+    respect_retry_after_header=False,
 )
 
 session = requests.Session()
@@ -68,7 +69,7 @@ session.mount("https://", adapter)
 
 
 def send_metrics(metrics):
-    response = requests.post(
+    response = session.post(
         API_URL,
         json=metrics,
         timeout=(3, 5)
@@ -93,5 +94,5 @@ if __name__ == "__main__":
             send_metrics(metrics)
             print("Alert delivered to n8n:", metrics)
         except requests.RequestException as error:
-            print("Delivery failed:", error)
+            print("Delivery failed; check local n8n execution status.")
         time.sleep(1)

@@ -1,0 +1,208 @@
+{
+  "name": "AegisOps v0.16 secure alert ingestion",
+  "active": false,
+  "nodes": [
+    {
+      "id": "Monitoring-webhook",
+      "name": "Monitoring webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aegisops-v016-alert",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "aegisops-v016-alert"
+    },
+    {
+      "id": "Validate-alert",
+      "name": "Validate alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const b = $json.body;\nconst valid = b && typeof b === 'object' && !Array.isArray(b)\n  && typeof b.service === 'string' && b.service.trim().length > 0\n  && typeof b.error_rate === 'number' && Number.isFinite(b.error_rate) && b.error_rate >= 0 && b.error_rate <= 100\n  && Number.isSafeInteger(b.latency) && b.latency >= 0;\nreturn [{json: valid ? {valid:true,payload:{service:b.service,error_rate:b.error_rate,latency:b.latency}} : {valid:false,statusCode:422,error_category:'invalid_payload',message:'Required: nonblank service, error_rate 0..100, nonnegative integer latency'}}];"
+      }
+    },
+    {
+      "id": "Valid-payload",
+      "name": "Valid payload",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "Ingest-incident",
+      "name": "Ingest incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8001/incidents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.payload }}",
+        "options": {
+          "timeout": 10000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "Sanitize-delivery-result",
+      "name": "Sanitize delivery result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -100
+      ],
+      "parameters": {
+        "jsCode": "const r = $json;\nconst candidate = Number(r.statusCode || r.error?.statusCode || r.error?.httpCode || 0);\nconst status = Number.isInteger(candidate) && candidate >= 100 && candidate <= 599 ? candidate : 0;\nif ((status === 200 || status === 201) && Number.isSafeInteger(r.body?.id)) {\n  return [{json:{statusCode:status,incident_id:r.body.id,api_status:status,delivery:'accepted'}}];\n}\nconst category = status === 401 || status === 403 ? 'backend_authorization_failed' : status === 429 || status >= 500 ? 'backend_transient_failure' : 'backend_delivery_failed';\nreturn [{json:{statusCode:502,api_status:status || null,error_category:category,message:'Delivery failed after at most 3 attempts; inspect API availability and credential configuration.'}}];"
+      }
+    },
+    {
+      "id": "Reply",
+      "name": "Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode }}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Monitoring webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate alert": {
+      "main": [
+        [
+          {
+            "node": "Valid payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid payload": {
+      "main": [
+        [
+          {
+            "node": "Ingest incident",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest incident": {
+      "main": [
+        [
+          {
+            "node": "Sanitize delivery result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitize delivery result": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "pinData": {}
+}
