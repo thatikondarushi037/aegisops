@@ -30,7 +30,39 @@ import requests
 
 from authentication import require_ingest, require_operator
 
-app = FastAPI(title="AegisOps API", version="0.16.0")
+app = FastAPI(title="AegisOps API", version="0.17.0")
+
+# The browser surface is read-only and uses a separate session boundary.
+from pathlib import Path
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from dashboard_auth import router as dashboard_auth_router
+from dashboard_api import router as dashboard_api_router
+
+frontend_directory = Path(__file__).resolve().parent / "frontend"
+app.include_router(dashboard_auth_router)
+app.include_router(dashboard_api_router)
+app.mount("/dashboard/assets", StaticFiles(directory=frontend_directory), name="dashboard-assets")
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard():
+    return FileResponse(frontend_directory / "index.html")
+
+
+@app.middleware("http")
+async def dashboard_headers(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/dashboard"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; "
+            "img-src 'self' data:; connect-src 'self'; base-uri 'none'; "
+            "form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+        )
+    return response
 
 
 @app.get("/")
