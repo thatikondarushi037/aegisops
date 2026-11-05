@@ -25,7 +25,7 @@
     <p id="login-error" class="error-text" role="alert"></p>
     <small><span class="lock-dot"></span> Separate browser session · Read-only access</small>
   </form>
-  <span class="login-footer">AEGISOPS <span>OPERATIONS, WITH CONTEXT.</span> v0.17.0</span>
+  <span class="login-footer">AEGISOPS <span>OPERATIONS, WITH CONTEXT.</span> v0.18.0</span>
 </section>
 
 <div id="workspace" hidden>
@@ -37,8 +37,9 @@
       <button data-view="overview" aria-current="page"><span aria-hidden="true">▦</span> Overview</button>
       <button data-view="incidents"><span aria-hidden="true">◈</span> Incident explorer</button>
       <button data-view="automation"><span aria-hidden="true">⌁</span> Automation monitor</button>
+      <button data-view="assistant"><span aria-hidden="true">&#10023;</span> Assistant</button>
     </nav>
-    <div class="sidebar-bottom"><div class="guard-icon" aria-hidden="true">◇</div><strong>Insight. Then oversight.</strong><p>AI investigates.<br>People make the decisions.</p><span class="badge neutral">Read-only workspace</span><small>AegisOps / v0.17.0</small></div>
+    <div class="sidebar-bottom"><div class="guard-icon" aria-hidden="true">◇</div><strong>Insight. Then oversight.</strong><p>AI investigates.<br>People make the decisions.</p><span class="badge neutral">Read-only workspace</span><small>AegisOps / v0.18.0</small></div>
   </aside>
   <div class="content-shell">
     <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong id="breadcrumb">Overview</strong></div><div class="top-actions"><span class="local-pill"><i></i> Local environment</span><button id="logout" class="text-button">Sign out</button><span class="avatar" aria-label="Operator session">OP</span></div></header>
@@ -65,6 +66,28 @@
       <section id="automation-view" aria-label="Automation monitor" hidden>
         <div id="job-stats" class="stat-grid"></div><div class="notice"><span aria-hidden="true">ⓘ</span> This monitor shows durable AegisOps investigation jobs. n8n execution history is not available here.</div>
         <section class="panel"><div class="panel-heading"><div><h2>Investigation jobs</h2><p>Attempts, progress and sanitized failure information</p></div><label class="compact-label">Job status<select id="job-filter"><option value="">All statuses</option><option value="pending">Pending</option><option value="running">Running</option><option value="completed">Completed</option><option value="failed">Failed</option></select></label></div><div id="job-table" class="table-wrap" aria-live="polite"></div><div id="job-pagination" class="pagination"></div></section>
+      </section>
+      <section id="assistant-view" aria-label="Operations assistant" hidden>
+        <div class="assistant-layout">
+          <section class="panel assistant-panel" aria-label="Conversation">
+            <div class="panel-heading"><div><h2><span class="accent">&#10023;</span> Aegis Assistant</h2><p>Real records. Explicit sources. Human judgment.</p></div><button id="assistant-clear" class="text-button">Clear conversation</button></div>
+            <div id="assistant-messages" class="assistant-messages" role="log" aria-live="polite" aria-relevant="additions"></div>
+            <div class="assistant-prompts" aria-label="Suggested questions">
+              <button data-assistant-prompt="Show me the latest critical incidents.">Latest critical incidents</button>
+              <button data-assistant-prompt="Are any AI investigation jobs failing?">Failing investigation jobs</button>
+              <button data-assistant-prompt="What does our runbook recommend checking?">Runbook checks</button>
+            </div>
+            <form id="assistant-form" class="assistant-composer">
+              <div class="assistant-context-row"><label for="assistant-context">Incident context <span class="muted">(optional)</span></label><input id="assistant-context" type="number" min="1" max="2147483647" step="1" placeholder="Incident ID" aria-describedby="assistant-context-hint"></div>
+              <span id="assistant-context-hint" class="assistant-hint">Follow-ups retain the last incident. Clear the conversation to reset context.</span>
+              <label class="composer-label" for="assistant-input">Your question</label>
+              <textarea id="assistant-input" rows="3" maxlength="2000" required placeholder="What happened, and what evidence do we have?"></textarea>
+              <div class="composer-bottom"><span>Enter to send &middot; Shift+Enter for a new line</span><button id="assistant-send" class="primary" type="submit">Send question &#8599;</button></div>
+              <div id="assistant-error" class="notice error-notice" role="alert" hidden></div>
+            </form>
+          </section>
+          <aside class="panel assistant-guide"><span class="eyebrow">A SMALL, DELIBERATE BOUNDARY</span><h2>Understanding.<br>Without autonomy.</h2><p>Ask in plain language. The assistant retrieves live records and relevant runbook passages, then Qwen selects cited evidence.</p><ol><li><strong>Retrieve</strong><span>Five allowlisted, read-only tools.</span></li><li><strong>Ground</strong><span>Observed facts stay separate from hypotheses.</span></li><li><strong>Review</strong><span>Follow citations. Decide what to do.</span></li></ol><div class="assistant-boundary">No shell. No arbitrary SQL.<br>No remediation. No invented records.</div><span class="badge neutral">6 turns &middot; session only</span><p class="assistant-hint">If AI is unavailable, retrieved facts remain visible with an explicit fallback notice. Runbook passages and model text are untrusted reference material.</p></aside>
+        </div>
       </section>
       <footer class="page-footer"><span><span class="brand-mini">A</span> AegisOps <span class="muted">/ AI operations workspace</span></span><span>Observe. Understand. Review.</span></footer>
     </main>

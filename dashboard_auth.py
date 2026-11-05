@@ -1,5 +1,5 @@
 """Local browser authentication, separate from API service credentials."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import os
 import secrets
@@ -21,6 +21,9 @@ attempts = {}
 class Session:
     csrf: str
     expires: float
+    assistant_history: list = field(default_factory=list)
+    assistant_context: int | None = None
+    assistant_lock: object = field(default_factory=Lock)
 
 
 def password_hash(password, salt=None):
@@ -108,11 +111,15 @@ def session_info(session=Depends(browser_session)):
     return {"csrf_token": session.csrf, "expires_in": max(0, int(session.expires - time.monotonic()))}
 
 
-@router.post("/logout", status_code=204)
-def logout(request: Request, response: Response, session=Depends(browser_session)):
+def require_csrf(request: Request, session=Depends(browser_session)):
     check_origin(request)
     if not secrets.compare_digest(request.headers.get("x-csrf-token", "").encode(), session.csrf.encode()):
         raise HTTPException(403, "Invalid CSRF token")
+    return session
+
+
+@router.post("/logout", status_code=204)
+def logout(request: Request, response: Response, session=Depends(require_csrf)):
     with lock:
         sessions.pop(request.cookies.get(COOKIE, ""), None)
     response.delete_cookie(COOKIE, path="/dashboard")

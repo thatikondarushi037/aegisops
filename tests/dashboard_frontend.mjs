@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 
-const source = readFileSync(new URL('../frontend/app.js', import.meta.url));
+const assistantSource = readFileSync(new URL('../frontend/assistant.js', import.meta.url));
+const assistantURL = 'data:text/javascript;base64,' + assistantSource.toString('base64');
+const source = Buffer.from(readFileSync(new URL('../frontend/app.js', import.meta.url), 'utf8').replace("'./assistant.js'", JSON.stringify(assistantURL)));
+const assistantUI = await import(assistantURL);
 const ui = await import('data:text/javascript;base64,' + source.toString('base64'));
 
 class SafeNode {
@@ -55,4 +58,15 @@ test('request timeout is bounded and presents a useful stale-data message', asyn
     options.signal.addEventListener('abort', () => reject(new DOMException('private timeout', 'AbortError')));
   });
   await assert.rejects(ui.requestJSON('/dashboard/api/overview', {}, 10), /timed out.*retained/);
+});
+
+
+test('assistant messages and citations render malicious text without HTML sinks', () => {
+  globalThis.document = {createElement: tag => new SafeNode(tag)};
+  const attack = '<img src=x onerror="globalThis.compromised=true">';
+  const turn = {message:attack,answer:{introduction:attack,notice:attack,status:'grounded',tools_used:['get_incident'],facts:[{category:'observation',text:attack,source:attack,incident_id:null,runbook_source:attack}]}};
+  const view = assistantUI.renderAssistantTurn(turn, ui.element, () => {});
+  assert.ok(view.textContent.includes(attack));
+  assert.equal(globalThis.compromised, undefined);
+  assert.equal(view.children[1].children[2].tagName, 'section');
 });

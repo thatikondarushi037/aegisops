@@ -7,7 +7,11 @@ EMBED_URL = f"{OLLAMA_BASE_URL}/api/embed"
 EMBED_MODEL = OLLAMA_EMBED_MODEL
 
 # function to generate embeddings for a given text using the specified embedding model. This will help in converting the text into a numerical representation that can be used for various machine learning tasks, such as similarity search or clustering.
-def embed_text(text):
+def embed_text(text, *, deadline=None):
+    import time
+    remaining = deadline - time.monotonic() if deadline is not None else OLLAMA_EMBED_TIMEOUT
+    if remaining <= 0:
+        raise requests.Timeout("Embedding budget exhausted")
     response = requests.post(
         EMBED_URL,
         json={
@@ -15,7 +19,7 @@ def embed_text(text):
             "input": text,
             "truncate": False
         },
-        timeout=(5, OLLAMA_EMBED_TIMEOUT)
+        timeout=(min(5, remaining), min(OLLAMA_EMBED_TIMEOUT, remaining))
     )
     response.raise_for_status()  # Check if the request was successful and raise an error if not
     return response.json()["embeddings"]

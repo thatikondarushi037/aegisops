@@ -23,18 +23,19 @@ def cosine_similarity(vector_a, vector_b):
 
 # function to retrieve the most relevant runbooks based on a given query. This will help in finding the most relevant information from the runbooks for a specific query, which can be useful for tasks such as troubleshooting or incident investigation.
 
-def retrieve_runbooks(query, top_k=3):
+def retrieve_runbooks(query, top_k=3, *, deadline=None, max_chunks=None):
     documents = load_runbooks()
     chunks = chunk_documents(documents)
+    if max_chunks is not None:
+        chunks = chunks[:max_chunks]
 
     if not chunks:
         return []
 
-    chunk_vectors = embed_text(
-        [chunk["text"] for chunk in chunks]
-    )
+    options = {"deadline": deadline} if deadline is not None else {}
+    chunk_vectors = embed_text([chunk["text"] for chunk in chunks], **options)
 
-    query_vector = embed_text([query])[0] # Generate the embedding for the query to compare it with the embeddings of the runbook chunks
+    query_vector = embed_text([query], **options)[0] # Generate the embedding for the query to compare it with the embeddings of the runbook chunks
 
     results = []
 

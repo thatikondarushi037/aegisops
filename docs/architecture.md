@@ -1,11 +1,11 @@
-# AegisOps architecture — v0.17.0
+# AegisOps architecture — v0.18.0
 
 AegisOps runs locally: FastAPI serves the API and buildless dashboard on
 `127.0.0.1:8001`. PostgreSQL stays on the Compose network. The existing n8n
 container publishes only `127.0.0.1:5678`. One independent worker uses the
 durable PostgreSQL queue and Windows Ollama through
-`host.docker.internal:11434`. No public service, broker, frontend runtime,
-or conversational assistant is added.
+`host.docker.internal:11434`. No public service, broker, frontend runtime, or autonomous-agent framework
+is added.
 
 ```mermaid
 flowchart LR
@@ -27,9 +27,10 @@ flowchart LR
 authorization dependencies or ingestion/worker contracts. `dashboard_auth.py`
 owns local browser sessions; `dashboard_api.py` owns bounded read-only
 queries and response schemas. `frontend/` renders those responses using
-DOM text nodes and polls visible views every eight seconds. The dashboard
-never invokes model inference, creates a job, modifies an incident, or
-executes remediation.
+DOM text nodes and polls visible views every eight seconds. The operations views never create jobs, modify incidents or execute
+remediation. The Assistant view adds bounded model-based evidence selection
+through a separate session/CSRF-protected router; it never initiates an
+investigation or mutates application records.
 
 Authentication boundaries are intentionally separate. n8n uses the existing
 ingestion-only token. Trusted non-browser operators retain their existing
@@ -59,3 +60,28 @@ action buttons bypass that boundary.
 See [dashboard operations](v0.17.0-dashboard.md),
 [secure n8n integration](v0.16.0-secure-n8n.md), and
 [durable worker design](v0.15.0-durable-investigations.md).
+
+
+## Read-only assistant (v0.18.0)
+
+`assistant_api.py` stores six conversation turns on the existing dashboard
+session. Its POST/clear endpoints reuse the same-origin CSRF dependency;
+GET reads only that session's history. No conversation table is added.
+`assistant_tools.py` exposes five typed, bounded SELECT/RAG capabilities:
+list incidents, get an incident, get saved investigations, get its automatic
+job, and search existing runbooks. Authorization is checked at dispatch.
+
+`assistant_service.py` determines the retrieval plan on the server, calls at
+most four tools and gives Qwen a fact registry. The model returns only a
+schema-constrained selection of known fact IDs. The server builds factual
+text and citation links from retrieved data, rejects fabricated references,
+and retains required unknown/missing-evidence notices. This is extractive
+reasoning with no arbitrary SQL, file/URL access, shell or remediation.
+
+`frontend/assistant.js` renders session messages and facts using text nodes.
+Incident/investigation citations open the existing detail dialog; runbooks
+show actual filenames and quoted passages. Model failure produces an explicit
+verified-facts fallback. No database transaction remains open during model
+selection. The original ingestion, queue and worker paths are unchanged.
+
+See [assistant design, verification and limits](v0.18.0-assistant.md).

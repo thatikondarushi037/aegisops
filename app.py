@@ -30,7 +30,7 @@ import requests
 
 from authentication import require_ingest, require_operator
 
-app = FastAPI(title="AegisOps API", version="0.17.0")
+app = FastAPI(title="AegisOps API", version="0.18.0")
 
 # The browser surface is read-only and uses a separate session boundary.
 from pathlib import Path
@@ -38,10 +38,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from dashboard_auth import router as dashboard_auth_router
 from dashboard_api import router as dashboard_api_router
+from assistant_api import router as assistant_router
 
 frontend_directory = Path(__file__).resolve().parent / "frontend"
 app.include_router(dashboard_auth_router)
 app.include_router(dashboard_api_router)
+app.include_router(assistant_router)
 app.mount("/dashboard/assets", StaticFiles(directory=frontend_directory), name="dashboard-assets")
 
 

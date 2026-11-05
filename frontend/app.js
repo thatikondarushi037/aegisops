@@ -1,3 +1,4 @@
+import {initAssistant, enterAssistant, resetAssistant, scopeAssistant} from './assistant.js';
 const labels = {normal: 'Healthy metrics', critical: 'Critical', warning: 'Warning', pending: 'Pending', running: 'Running', completed: 'Completed', failed: 'Failed', open: 'Open', closed: 'Closed', resolved: 'Resolved', superseded: 'Superseded'};
 const state = {view: 'overview', offset: 0, jobOffset: 0, historyOffset: 0, selected: null, csrf: null, busy: false, timer: null, lastSuccess: null, requestVersion: 0, authenticated: false};
 const $ = id => document.getElementById(id);
@@ -24,7 +25,7 @@ export async function requestJSON(path, options = {}, timeout = 7000) {
   try {
     const response = await fetch(path, {...options, credentials: 'same-origin', signal: controller.signal, headers: {'Accept': 'application/json', ...options.headers}});
     if (!response.ok) {
-      const messages = {401: 'Your session has expired. Please sign in again.', 403: 'This request was blocked. Check the local dashboard address.', 429: 'Too many login attempts. Try again in five minutes.', 503: 'The service is temporarily unavailable. Please try again.'};
+      const messages = {401: 'Your session has expired. Please sign in again.', 403: 'This request was blocked. Check the local dashboard address.', 429: 'Requests are temporarily limited. Please wait and try again.', 503: 'The service is temporarily unavailable. Please try again.'};
       const error = new Error(messages[response.status] || 'The request could not be completed. Please try again.');
       error.status = response.status;
       throw error;
@@ -115,6 +116,7 @@ function renderStats(data) {
 
 export function renderInvestigation(item) {
   const card = element('article', 'investigation');
+  card.id = 'investigation-' + item.id;
   const meta = element('div', 'detail-meta');
   meta.append(element('span', '', `INV-${item.id}`), element('span', '', formatDate(item.created_at)), element('span', 'badge neutral', `${item.confidence} confidence`));
   card.append(meta, element('h4', '', 'Observed evidence'));
@@ -129,6 +131,9 @@ function detailContent(data, history) {
   const incident = data.incident;
   const header = element('header', 'detail-header'); header.append(element('span', 'incident-id', `INC-${incident.id}`), element('h2', '', incident.service)); header.lastChild.id = 'detail-title';
   const meta = element('div', 'detail-meta'); meta.append(badge(incident.severity), badge(incident.status), element('span', '', formatDate(incident.created_at))); header.append(meta);
+  const askButton = element('button', 'secondary ask-incident', 'Ask assistant about this incident');
+  askButton.addEventListener('click', () => {scopeAssistant(incident.id); $('detail-dialog').close(); navigate('assistant');});
+  header.append(askButton);
   const facts = element('section', 'detail-section'); facts.append(element('h3', '', 'Observed facts'));
   const grid = element('div', 'fact-grid');
   for (const [label, value] of [['Error rate', `${incident.error_rate}%`], ['Latency', `${incident.latency} ms`]]) { const fact = element('div', 'fact'); fact.append(element('span', '', label), element('strong', '', value)); grid.append(fact); }
@@ -158,29 +163,32 @@ async function loadDetail() {
   }
 }
 
-async function openDetail(id) {
+async function openDetail(id, investigationId = null) {
   state.selected = id; state.historyOffset = 0;
   empty($('detail-content'), 'Loading incident…', 'Retrieving observed metrics and saved investigations.');
   if (!$('detail-dialog').open) $('detail-dialog').showModal();
   await loadDetail();
+  if (investigationId) document.getElementById('investigation-' + investigationId)?.scrollIntoView({block: 'center'});
 }
 
 function showLogin(message = '') {
   state.authenticated = false; state.csrf = null; state.requestVersion++;
+  resetAssistant();
   clearTimeout(state.timer); $('workspace').hidden = true; $('login').hidden = false;
   $('detail-dialog').close(); state.selected = null; $('detail-content').replaceChildren();
   for (const id of ['recent-table', 'incident-table', 'job-table', 'pipeline', 'job-stats', 'incident-pagination', 'job-pagination']) $(id).replaceChildren();
-  for (const id of ['total', 'open', 'critical', 'warning']) $('stat-' + id).textContent = '?';
+  for (const id of ['total', 'open', 'critical', 'warning']) $('stat-' + id).textContent = '\u2014';
   state.lastSuccess = null;
   $('password').value = ''; $('login-error').textContent = message;
 }
 
 function schedule() {
   clearTimeout(state.timer);
-  if (state.authenticated && !document.hidden) state.timer = setTimeout(refresh, 8000);
+  if (state.authenticated && !document.hidden && state.view !== 'assistant') state.timer = setTimeout(refresh, 8000);
 }
 
 async function refresh() {
+  if (state.view === 'assistant') {clearTimeout(state.timer); return;}
   if (state.busy || !state.authenticated || document.hidden) return;
   state.busy = true; $('refresh').disabled = true;
   const version = state.requestVersion;
@@ -223,23 +231,27 @@ async function refresh() {
 function navigate(view) {
   state.view = view; state.requestVersion++;
   const content = {
+    assistant: ['Assistant', 'Your operations assistant', 'CONVERSATION, GROUNDED IN EVIDENCE', 'Ask about incidents, investigations and runbooks. Read-only, cited and under your control.'],
     overview: ['Overview', 'Operations overview', 'YOUR OPERATIONS, IN FOCUS', 'A clear view of your incidents and AI investigation pipeline.'],
     incidents: ['Incident explorer', 'Incident explorer', 'FOLLOW THE EVIDENCE', 'Explore service signals, observed facts and saved AI investigations.'],
     automation: ['Automation monitor', 'Automation monitor', 'FROM SIGNAL TO SAVED INSIGHT', 'Follow durable investigation jobs through every attempt.']
   }[view];
   $('breadcrumb').textContent = content[0]; $('page-title').replaceChildren(document.createTextNode(content[1]), element('span', 'accent', '.')); $('page-eyebrow').textContent = content[2]; $('page-description').textContent = content[3];
   for (const node of document.querySelectorAll('[data-view]')) { if (node.dataset.view === view) node.setAttribute('aria-current', 'page'); else node.removeAttribute('aria-current'); }
-  for (const name of ['overview', 'incidents', 'automation']) $(name + '-view').hidden = name !== view;
-  refresh();
+  for (const name of ['overview', 'incidents', 'automation', 'assistant']) $(name + '-view').hidden = name !== view;
+  $('refresh').hidden = view === 'assistant';
+  document.querySelector('.poll-label').hidden = view === 'assistant';
+  if (view === 'assistant') {clearTimeout(state.timer); $('refresh-status').textContent = 'Session-only history \u00b7 fresh evidence retrieved for each question'; enterAssistant();} else refresh();
 }
 
 function authenticated(session) {
   state.csrf = session.csrf_token; state.authenticated = true;
   $('password').value = ''; $('login').hidden = true; $('workspace').hidden = false;
-  refresh();
+  if (state.view === 'assistant') enterAssistant(); else refresh();
 }
 
 async function boot() {
+  initAssistant({element, requestJSON, getCSRF: () => state.csrf, openIncident: openDetail, onAuthFailure: () => showLogin('Your session has expired. Please sign in again.')});
   for (const node of document.querySelectorAll('[data-view]')) node.addEventListener('click', () => navigate(node.dataset.view));
   $('view-all').addEventListener('click', () => navigate('incidents'));
   $('open-automation').addEventListener('click', () => navigate('automation'));
