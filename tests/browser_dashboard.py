@@ -17,7 +17,7 @@ from playwright.sync_api import sync_playwright, expect
 def main():
     base = "http://127.0.0.1:8001"
     password = (ROOT / ".env.dashboard-login").read_text(encoding="utf-8").strip()
-    screenshots = ROOT / "docs/screenshots"
+    screenshots = Path(os.getenv("AEGISOPS_SCREENSHOT_DIR", str(ROOT / "docs/screenshots")))
     screenshots.mkdir(exist_ok=True)
     checks = []
     errors = []
@@ -76,7 +76,7 @@ def main():
         checks.append("adversarial AI response remains literal text; no DOM injection or script execution")
 
         page.locator('[data-view="automation"]').click()
-        expect(page.locator("#job-table .badge.completed")).to_be_visible()
+        expect(page.locator("#job-table .badge.completed").first).to_be_visible()
         expect(page.locator("#automation-view")).to_contain_text("n8n execution history is not available")
         page.screenshot(path=str(screenshots / "v0.17-automation.png"), full_page=True)
         page.route("**/dashboard/api/overview", lambda route: route.fulfill(status=503, json={"detail": "PRIVATE_BACKEND_DETAIL"}))

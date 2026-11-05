@@ -10,3 +10,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 tests/
+agents/
+cleanup_duplicates.sql
+docs/
+scripts/

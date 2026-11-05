@@ -1,0 +1,24 @@
+{
+  "service": "demo-synthetic-f2ccfc3d5cc5",
+  "incident_id": 56,
+  "investigation_id": 3,
+  "api_statuses": [
+    201,
+    200
+  ],
+  "job": "completed",
+  "assistant": "grounded",
+  "saved_evidence_entries": 2,
+  "human_approval_required": true,
+  "existing_rows_unchanged": true,
+  "before_counts": {
+    "incidents": 51,
+    "investigations": 2,
+    "investigation_jobs": 2
+  },
+  "after_counts": {
+    "incidents": 52,
+    "investigations": 3,
+    "investigation_jobs": 3
+  }
+}
