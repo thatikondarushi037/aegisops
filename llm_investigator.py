@@ -1,16 +1,9 @@
 """
 AegisOps - RAG-assisted incident investigation.
 
-What this file does:
-1. Takes incident information (service, error rate, latency, severity).
-2. Retrieves a matching troubleshooting runbook.
-3. Sends incident information + runbook to Qwen through Ollama.
-4. Validates the returned JSON using our InvestigationResult schema.
-5. Returns the validated result without executing any remediation.
-
-Why this matters:
-Our previous investigator relied on the language model's general knowledge.
-Now it receives a relevant runbook describing troubleshooting procedures.
+Retrieves runbook guidance, requests a structured investigation from Ollama,
+and validates its identity and approval flag. Evidence is rebuilt from trusted
+incident metrics; no remediation is executed.
 
 However, retrieval is not proof. If a payment runbook mentions database
 connection exhaustion, Qwen must not claim that exhaustion occurred without
@@ -25,8 +18,7 @@ from rag_retriever import retrieve_runbooks
 from settings import OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL, OLLAMA_CHAT_TIMEOUT
 
 
-# Ollama runs locally on our Windows machine for this learning milestone.
-# Qwen generates text; the embedding model in rag_retriever finds runbooks.
+# The operator configures the Ollama endpoint and chat model in settings.
 OLLAMA_URL = f"{OLLAMA_BASE_URL}/api/chat"
 MODEL = OLLAMA_CHAT_MODEL
 
@@ -58,7 +50,6 @@ def validate_investigation(result, incident):
 
 
 def investigate_incident(incident, use_rag=True):
-    # STEP 1 - Build a search query from the incident information.
     # These are observed input measurements, not proof of the root cause.
     query = (
         f"Service: {incident['service']}. "
@@ -67,8 +58,7 @@ def investigate_incident(incident, use_rag=True):
         f"Severity: {incident['severity']}."
     )
 
-    # STEP 2 - Retrieve the most relevant runbook chunk.
-    # top_k=1 means one passage; later we can compare against top_k=3.
+    # Retrieve one passage when RAG is enabled.
     # This is retrieval, not confirmation that its possible causes occurred.
     matches = retrieve_runbooks(query, top_k=1) if use_rag else []
 
@@ -81,7 +71,6 @@ def investigate_incident(incident, use_rag=True):
 
     print("Retrieved runbooks:", [match["source"] for match in matches])
 
-    # STEP 3 - Ask Qwen to generate a structured investigation.
     # 'format' provides the Pydantic-generated JSON schema to Ollama.
     # 'stream': False gives us one complete response rather than chunks.
     # temperature=0 reduces randomness but does not guarantee determinism.
@@ -94,7 +83,6 @@ def investigate_incident(incident, use_rag=True):
             "options": {"temperature": 0},
             "messages": [
                 {
-                    # System message = the rules for investigating safely.
                     "role": "system",
                     "content": (
                         "You are a cautious incident investigator. "
@@ -108,7 +96,6 @@ def investigate_incident(incident, use_rag=True):
                     ),
                 },
                 {
-                    # User message = the particular incident and retrieved context.
                     "role": "user",
                     "content": (
                         f"INCIDENT ID: {incident['id']}\n"
@@ -130,12 +117,10 @@ def investigate_incident(incident, use_rag=True):
     )
     response.raise_for_status()
 
-    # STEP 4 - Validate Qwen's result using our existing Pydantic schema.
     # JSON shape validation does not mean every AI-generated claim is true.
     content = response.json()["message"]["content"]
     result = InvestigationResult.model_validate_json(content)
 
-    # STEP 5 - Check safety and incident identity in Python, not just prompts.
     # A model may ignore instructions. Application checks are still necessary.
     if result.incident_id != incident["id"]:
         raise ValueError("LLM returned an incorrect incident ID")
@@ -147,8 +132,7 @@ def investigate_incident(incident, use_rag=True):
     return validate_investigation(result, incident)
 
 
-# STEP 6 - Test the complete RAG pipeline with a synthetic incident.
-# This executes only when you run this file directly, not when importing it.
+# Explicit synthetic smoke test; requires configured Ollama models.
 if __name__ == "__main__":
     sample_incident = {
         "id": 54,
@@ -165,14 +149,6 @@ if __name__ == "__main__":
         print("Investigation failed:", error)
 
 
-# WHAT TO CHECK AFTER RUNNING: python llm_investigator.py
-# - Retrieved source should ideally be payment_service.md.
-# - Root cause should be 'Unknown' unless supplied evidence supports one.
-# - Recommendation should be informed by the payment runbook.
-# - Confidence should remain low when there is insufficient evidence.
-# - requires_human_approval should be true.
-#
-# CURRENT LIMITATIONS:
-# - Retrieval runs on every investigation; document embeddings aren't cached.
-# - Python checks don't yet verify every AI-generated evidence statement.
-# - We will later compare LLM-only and RAG-assisted investigations.
+# Retrieval recomputes document embeddings for each investigation. Metric
+# evidence is rebuilt in Python; generated recommendations remain unverified.
+# rag_evaluation.py compares LLM-only and RAG-assisted results.

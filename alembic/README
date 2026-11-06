@@ -1,1 +1,5 @@
-Generic single-database configuration.
+Single-database Alembic migrations for AegisOps.
+
+Connection settings come from database.py. Tests may supply an isolated-schema
+connection through config.attributes["connection"]. See
+docs/v0.14.0-database-integrity.md for migration safety and test setup.

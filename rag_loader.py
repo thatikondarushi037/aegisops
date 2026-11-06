@@ -21,7 +21,7 @@ def load_runbooks():
 
     return documents
 
-#creating a chunking function to break down the documents into smaller pieces for better processing and analysis. This will help in managing large documents and improve the efficiency of any subsequent operations, such as searching or analyzing the content.
+# Split runbooks into non-overlapping word chunks, preserving source names.
 def chunk_documents(documents, chunk_size=300):
     chunks = []
     
@@ -40,7 +40,7 @@ def chunk_documents(documents, chunk_size=300):
     return chunks
 
 
-# main block to load the runbooks, chunk them, and print the results. This will help in verifying that the documents are loaded correctly and that the chunking process is working as expected.
+# Explicit preview of loaded runbook chunks.
 
 if __name__ == "__main__":
     documents = load_runbooks()

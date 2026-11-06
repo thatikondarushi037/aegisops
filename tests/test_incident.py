@@ -2,7 +2,6 @@
 from models import Incident
 import pytest
 
-#unit testing 
 
 def test_critical_incident():
     incident = Incident(
@@ -35,7 +34,7 @@ def test_normal_incident():
 
 
 
-#boundary testing was done here 
+# Thresholds are strict: equality stays in the lower severity band.
 
 
 

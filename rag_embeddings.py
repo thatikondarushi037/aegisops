@@ -2,11 +2,11 @@ import requests
 from settings import OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL, OLLAMA_EMBED_TIMEOUT
 
 from rag_loader import load_runbooks, chunk_documents
-# load the runbooks and chunk them into smaller pieces for processing and analysis. This will help in managing large documents and improve the efficiency of any subsequent operations, such as searching or analyzing the content.
+# Ollama embedding endpoint and configured model.
 EMBED_URL = f"{OLLAMA_BASE_URL}/api/embed"
 EMBED_MODEL = OLLAMA_EMBED_MODEL
 
-# function to generate embeddings for a given text using the specified embedding model. This will help in converting the text into a numerical representation that can be used for various machine learning tasks, such as similarity search or clustering.
+# Respect the caller deadline as well as the configured request timeout.
 def embed_text(text, *, deadline=None):
     import time
     remaining = deadline - time.monotonic() if deadline is not None else OLLAMA_EMBED_TIMEOUT
@@ -21,10 +21,10 @@ def embed_text(text, *, deadline=None):
         },
         timeout=(min(5, remaining), min(OLLAMA_EMBED_TIMEOUT, remaining))
     )
-    response.raise_for_status()  # Check if the request was successful and raise an error if not
+    response.raise_for_status()
     return response.json()["embeddings"]
 
-# main block to load the runbooks, chunk them, and generate embeddings for each chunk. This will help in verifying that the documents are loaded correctly, that the chunking process is working as expected, and that embeddings are generated successfully for each chunk.
+# Explicit embedding smoke test for the local runbooks.
 
 if __name__ == "__main__":
     documents = load_runbooks()
@@ -41,4 +41,4 @@ if __name__ == "__main__":
     print("chunks:", len(chunks))
     print("Embeddings:", len(vectors))
     print("Embedding dimension:", len(vectors[0]))
-    print("First embedding vector:", vectors[0][:5])  # Print first 5 elements of the first embedding vector
+    print("First embedding vector:", vectors[0][:5])
